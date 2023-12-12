@@ -1,0 +1,78 @@
+`timescale 1 ps/1 ps
+//////////////////////////////////////////
+//                                      //
+//     this is slave FPGA side          //
+//  for  status_reg3_update_flag syc    //
+//      create by: Jay Gao              //
+//      date:                 // 
+//////////////////////////////////////////
+
+module spi_slave_CPU(
+    input cpu_clk,
+    input rstb,
+    input [7:0] status3_setup_tog, //from spi to set up
+    input [7:0] status3_clr_tog, //from cpu to pull down
+    output reg [7:0] CPU_status_reg3 //status3 reg is in spi-slave
+);
+
+reg [7:0] syc_status3_setup_tog_ff1; //syc flag flipflop
+reg [7:0] syc_status3_setup_tog_ff2; 
+reg [7:0] status3_clr_tog_s;
+wire [7:0] reg_status3_clear = (status3_clr_tog & ~status3_clr_tog_s) | (~status3_clr_tog & status3_clr_tog_s);
+//////////////////////////////////////////
+//      status_reg3_update_flag syc     //
+//////////////////////////////////////////
+always @(posedge cpu_clk or negedge rstb)begin
+    if(rstb==0) syc_status3_setup_tog_ff1 <=0;
+    else syc_status3_setup_tog_ff1 <= status3_setup_tog;
+end
+
+always @(posedge cpu_clk or negedge rstb)begin
+    if(rstb==0) syc_status3_setup_tog_ff2 <=0;
+    else syc_status3_setup_tog_ff2 <= syc_status3_setup_tog_ff1;
+end
+
+//===============for making clear pulse=====================
+always @(negedge rstb or posedge cpu_clk) begin
+   if(~rstb) begin
+      status3_clr_tog_s <= 1'b0;
+   end
+   else begin
+      status3_clr_tog_s <= status3_clr_tog;
+   end
+end
+
+//==================control CPU_status_reg3 set up / pull down=========================== 
+always @(posedge cpu_clk or negedge rstb)begin
+    if (rstb==0)begin
+        CPU_status_reg3 <= 8'h00;
+    //clear
+    end else if (reg_status3_clear[2] == 1'b1)begin
+        CPU_status_reg3[2] <= 1'b0;
+    end else if (reg_status3_clear[1] == 1'b1)begin
+        CPU_status_reg3[1] <= 1'b0;
+    end else if (reg_status3_clear[0] == 1'b1)begin
+        CPU_status_reg3[0] <= 1'b0;
+    //setup
+    end else if ( |syc_status3_setup_tog_ff2[2:0] ==1'b1 )begin //pull up from spi-side
+        if ( syc_status3_setup_tog_ff2[2] ==1'b1 )begin
+            CPU_status_reg3[2] <= 1'b1;
+        end else if ( syc_status3_setup_tog_ff2[1] ==1'b1 )begin
+            CPU_status_reg3[1] <= 1'b1;
+        end else if ( syc_status3_setup_tog_ff2[0] ==1'b1 )begin
+            CPU_status_reg3[0] <= 1'b1;
+        end
+    end else begin
+             CPU_status_reg3 <=  CPU_status_reg3;
+    end
+end
+
+//////////////////////////////////////////
+//      SRAM interface                  //
+//////////////////////////////////////////
+
+
+
+
+
+endmodule
